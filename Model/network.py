@@ -20,25 +20,30 @@ class Classifier_1fc(nn.Module):
 
 
 class residual_block(nn.Module):
-    def __init__(self, nChn=512):
+    def __init__(self, c_dim):
         super(residual_block, self).__init__()
-        self.block = nn.Sequential(
-                nn.Linear(nChn, nChn, bias=False),
-                nn.ReLU(inplace=True),
-                nn.Linear(nChn, nChn, bias=False),
-                nn.ReLU(inplace=True),
-            )
+        self.linear1 = nn.Linear(c_dim, c_dim, bias=False)
+        self.linear2 = nn.Linear(c_dim, c_dim, bias=False)
+        # Make sure ReLUs aren't in-place
+        self.relu1 = nn.ReLU(inplace=False)
+        self.relu2 = nn.ReLU(inplace=False)
+
     def forward(self, x):
-        tt = self.block(x)
-        x = x + tt
-        return x
+        # Use non-in-place operations
+        identity = x.clone()
+        out = self.relu1(self.linear1(x))
+        out = self.linear2(out)
+        out = out + identity  # Not in-place addition
+        out = self.relu2(out)
+        return out
 
 
 class DimReduction(nn.Module):
     def __init__(self, n_channels, m_dim=512, numLayer_Res=0):
         super(DimReduction, self).__init__()
         self.fc1 = nn.Linear(n_channels, m_dim, bias=False)
-        self.relu1 = nn.ReLU(inplace=True)
+        # Change inplace=True to inplace=False to avoid breaking computation graph
+        self.relu1 = nn.ReLU(inplace=False)
         self.numRes = numLayer_Res
 
         self.resBlocks = []
@@ -47,15 +52,11 @@ class DimReduction(nn.Module):
         self.resBlocks = nn.Sequential(*self.resBlocks)
 
     def forward(self, x):
-
-        x = self.fc1(x)
-        x = self.relu1(x)
+        # Create new tensor for each operation
+        out = self.fc1(x.clone())
+        out = self.relu1(out)  # Already using inplace=False
 
         if self.numRes > 0:
-            x = self.resBlocks(x)
+            out = self.resBlocks(out)
 
-        return x
-
-
-
-
+        return out
